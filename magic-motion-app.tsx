@@ -1,11 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
-import { ArrowLeft, Camera, ImageIcon, Play, Share, Download, Edit } from "lucide-react"
+import { ArrowLeft, Camera, ImageIcon, Play, Share, Download, Edit, Upload } from "lucide-react"
 
 type Screen = "welcome" | "add-art" | "ai-detection" | "select-blocks" | "motion-settings" | "preview" | "video-ready"
 
@@ -13,6 +13,10 @@ export default function Component() {
   const [currentScreen, setCurrentScreen] = useState<Screen>("welcome")
   const [speed1, setSpeed1] = useState([60])
   const [speed2, setSpeed2] = useState([70])
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
 
   const goToScreen = (screen: Screen) => {
     setCurrentScreen(screen)
@@ -34,14 +38,56 @@ export default function Component() {
     }
   }
 
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      setIsProcessing(true)
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const result = e.target?.result as string
+        setUploadedImage(result)
+        setIsProcessing(false)
+        setTimeout(() => goToScreen("ai-detection"), 1000)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleCameraCapture = () => {
+    if (cameraInputRef.current) {
+      cameraInputRef.current.click()
+    }
+  }
+
+  const handleGallerySelect = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click()
+    }
+  }
+
   const renderScreen = () => {
     switch (currentScreen) {
       case "welcome":
         return <WelcomeScreen onNext={() => goToScreen("add-art")} />
       case "add-art":
-        return <AddArtScreen onNext={() => goToScreen("ai-detection")} onBack={goBack} />
+        return (
+          <AddArtScreen 
+            onNext={() => goToScreen("ai-detection")} 
+            onBack={goBack}
+            onCameraCapture={handleCameraCapture}
+            onGallerySelect={handleGallerySelect}
+            uploadedImage={uploadedImage}
+            isProcessing={isProcessing}
+          />
+        )
       case "ai-detection":
-        return <AIDetectionScreen onNext={() => goToScreen("select-blocks")} onBack={goBack} />
+        return (
+          <AIDetectionScreen 
+            onNext={() => goToScreen("select-blocks")} 
+            onBack={goBack}
+            uploadedImage={uploadedImage}
+          />
+        )
       case "select-blocks":
         return <SelectBlocksScreen onNext={() => goToScreen("motion-settings")} onBack={goBack} />
       case "motion-settings":
@@ -66,7 +112,25 @@ export default function Component() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-[375px] bg-white rounded-[32px] shadow-2xl overflow-hidden">{renderScreen()}</div>
+      <div className="w-full max-w-[375px] bg-white rounded-[32px] shadow-2xl overflow-hidden">
+        {renderScreen()}
+        {/* Hidden file inputs */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleImageUpload}
+          className="hidden"
+        />
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleImageUpload}
+          className="hidden"
+        />
+      </div>
     </div>
   )
 }
@@ -134,7 +198,21 @@ function WelcomeScreen({ onNext }: { onNext: () => void }) {
   )
 }
 
-function AddArtScreen({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
+function AddArtScreen({ 
+  onNext, 
+  onBack, 
+  onCameraCapture, 
+  onGallerySelect, 
+  uploadedImage, 
+  isProcessing 
+}: { 
+  onNext: () => void; 
+  onBack: () => void;
+  onCameraCapture: () => void;
+  onGallerySelect: () => void;
+  uploadedImage: string | null;
+  isProcessing: boolean;
+}) {
   return (
     <div className="p-6 min-h-[812px] flex flex-col">
       {/* Header */}
@@ -145,30 +223,62 @@ function AddArtScreen({ onNext, onBack }: { onNext: () => void; onBack: () => vo
         <h2 className="text-xl font-bold text-gray-900">Add Your Art</h2>
       </div>
 
-      {/* Image Placeholder */}
+      {/* Image Preview */}
       <div className="flex-1 mb-6">
-        <div className="aspect-square bg-gradient-to-br from-blue-100 via-green-100 to-yellow-100 rounded-3xl flex items-center justify-center mb-6 border border-gray-200">
-          <div className="w-24 h-24 bg-white rounded-2xl flex items-center justify-center shadow-md">
-            <ImageIcon className="w-12 h-12 text-gray-400" />
-          </div>
+        <div className="relative aspect-square bg-gradient-to-br from-blue-100 via-green-100 to-yellow-100 rounded-3xl flex items-center justify-center mb-6 border border-gray-200 overflow-hidden">
+          {uploadedImage ? (
+            <>
+              <img 
+                src={uploadedImage} 
+                alt="Uploaded artwork" 
+                className="w-full h-full object-cover rounded-3xl"
+              />
+              {isProcessing && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-3xl">
+                  <div className="text-white text-center">
+                    <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                    <p className="text-sm">Processing...</p>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="w-24 h-24 bg-white rounded-2xl flex items-center justify-center shadow-md">
+              <ImageIcon className="w-12 h-12 text-gray-400" />
+            </div>
+          )}
         </div>
       </div>
 
       {/* Buttons */}
       <div className="space-y-4 mb-6">
-        <Button className="w-full h-14 text-lg font-bold bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-black rounded-2xl shadow-lg border-0">
+        <Button 
+          onClick={onCameraCapture}
+          disabled={isProcessing}
+          className="w-full h-14 text-lg font-bold bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-black rounded-2xl shadow-lg border-0 disabled:opacity-50"
+        >
           <Camera className="w-5 h-5 mr-2" />
           Take Photo
         </Button>
 
         <Button
-          onClick={onNext}
+          onClick={onGallerySelect}
+          disabled={isProcessing}
           variant="outline"
-          className="w-full h-14 text-lg font-semibold border-2 border-gray-200 hover:border-gray-300 rounded-2xl bg-white text-gray-700 hover:bg-gray-50"
+          className="w-full h-14 text-lg font-semibold border-2 border-gray-200 hover:border-gray-300 rounded-2xl bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
         >
-          <ImageIcon className="w-5 h-5 mr-2" />
+          <Upload className="w-5 h-5 mr-2" />
           Choose from Gallery
         </Button>
+
+        {uploadedImage && !isProcessing && (
+          <Button
+            onClick={onNext}
+            className="w-full h-14 text-lg font-bold bg-gradient-to-r from-green-400 to-green-500 hover:from-green-500 hover:to-green-600 text-white rounded-2xl shadow-lg border-0"
+          >
+            Continue with this Image
+          </Button>
+        )}
       </div>
 
       {/* Checkbox */}
@@ -182,14 +292,38 @@ function AddArtScreen({ onNext, onBack }: { onNext: () => void; onBack: () => vo
       {/* Help Text */}
       <div className="p-4 bg-gray-50 rounded-2xl">
         <p className="text-sm text-gray-600 text-center">
-          Take a photo of your art or drawing or choose one from your gallery to get started!
+          {uploadedImage 
+            ? "Great! Your image is ready. Click 'Continue' to proceed with AI detection."
+            : "Take a photo of your art or drawing or choose one from your gallery to get started!"
+          }
         </p>
       </div>
     </div>
   )
 }
 
-function AIDetectionScreen({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
+function AIDetectionScreen({ 
+  onNext, 
+  onBack, 
+  uploadedImage 
+}: { 
+  onNext: () => void; 
+  onBack: () => void;
+  uploadedImage: string | null;
+}) {
+  const [isDetecting, setIsDetecting] = useState(true)
+  const [detectedObjects, setDetectedObjects] = useState<number>(0)
+
+  // Simulate AI detection process
+  useState(() => {
+    if (uploadedImage) {
+      setTimeout(() => {
+        setDetectedObjects(Math.floor(Math.random() * 3) + 2) // 2-4 objects
+        setIsDetecting(false)
+      }, 2000)
+    }
+  })
+
   return (
     <div className="p-6 min-h-[812px] flex flex-col">
       {/* Header */}
@@ -203,49 +337,101 @@ function AIDetectionScreen({ onNext, onBack }: { onNext: () => void; onBack: () 
       {/* Image with Overlays */}
       <div className="flex-1 mb-6">
         <div className="relative aspect-square rounded-3xl overflow-hidden border border-gray-200">
-          {/* Background artwork simulation */}
-          <div className="absolute inset-0 bg-gradient-to-br from-green-200 via-blue-200 to-yellow-200"></div>
-          <div className="absolute inset-4 bg-gradient-to-br from-green-300 via-blue-300 to-yellow-300 rounded-2xl"></div>
+          {uploadedImage ? (
+            <>
+              <img 
+                src={uploadedImage} 
+                alt="Uploaded artwork" 
+                className="w-full h-full object-cover"
+              />
+              
+              {isDetecting && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                  <div className="text-white text-center">
+                    <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                    <p className="text-lg font-semibold">AI is analyzing your artwork...</p>
+                    <p className="text-sm opacity-75">This may take a few seconds</p>
+                  </div>
+                </div>
+              )}
 
-          {/* Detected objects */}
-          <div className="absolute top-1/4 left-1/3 w-20 h-20 bg-pink-400 rounded-2xl shadow-lg opacity-80 transform rotate-12"></div>
-          <div className="absolute bottom-1/3 right-1/4 w-16 h-16 bg-blue-400 rounded-full shadow-lg opacity-80"></div>
-
-          {/* Selection indicators */}
-          <div className="absolute top-1/4 left-1/3 w-20 h-20 border-4 border-yellow-400 rounded-2xl transform rotate-12"></div>
-          <div className="absolute bottom-1/3 right-1/4 w-16 h-16 border-4 border-yellow-400 rounded-full"></div>
+              {!isDetecting && detectedObjects > 0 && (
+                <>
+                  {/* Detected object overlays - positioned randomly */}
+                  {Array.from({ length: detectedObjects }).map((_, index) => (
+                    <div key={index}>
+                      <div 
+                        className="absolute w-16 h-16 border-4 border-yellow-400 rounded-2xl"
+                        style={{
+                          top: `${20 + (index * 15)}%`,
+                          left: `${25 + (index * 20)}%`,
+                          transform: `rotate(${index * 15}deg)`
+                        }}
+                      />
+                      <div 
+                        className="absolute bg-yellow-400 text-black text-xs font-bold px-2 py-1 rounded-full"
+                        style={{
+                          top: `${15 + (index * 15)}%`,
+                          left: `${20 + (index * 20)}%`
+                        }}
+                      >
+                        {index + 1}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </>
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-green-200 via-blue-200 to-yellow-200"></div>
+          )}
         </div>
       </div>
 
       {/* AI Detection Result */}
-      <div className="mb-6">
-        <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 mb-4">
-          <p className="text-center text-gray-700 font-medium">AI found 2 objects in your artwork</p>
+      {!isDetecting && (
+        <div className="mb-6">
+          <div className="bg-green-50 border border-green-200 rounded-2xl p-4 mb-4">
+            <p className="text-center text-gray-700 font-medium">
+              ✅ AI found {detectedObjects} objects in your artwork
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Action Buttons */}
       <div className="space-y-3 mb-4">
-        <Button
-          variant="outline"
-          className="w-full h-12 text-base font-semibold border-2 border-gray-200 hover:border-gray-300 rounded-2xl bg-white text-gray-700 hover:bg-gray-50"
-        >
-          Retry AI Detection
-        </Button>
+        {!isDetecting && (
+          <>
+            <Button
+              onClick={() => {
+                setIsDetecting(true)
+                setTimeout(() => {
+                  setDetectedObjects(Math.floor(Math.random() * 3) + 2)
+                  setIsDetecting(false)
+                }, 2000)
+              }}
+              variant="outline"
+              className="w-full h-12 text-base font-semibold border-2 border-gray-200 hover:border-gray-300 rounded-2xl bg-white text-gray-700 hover:bg-gray-50"
+            >
+              Retry AI Detection
+            </Button>
 
-        <Button
-          variant="outline"
-          className="w-full h-12 text-base font-semibold border-2 border-gray-200 hover:border-gray-300 rounded-2xl bg-white text-gray-700 hover:bg-gray-50"
-        >
-          Switch to Manual Selection
-        </Button>
+            <Button
+              variant="outline"
+              className="w-full h-12 text-base font-semibold border-2 border-gray-200 hover:border-gray-300 rounded-2xl bg-white text-gray-700 hover:bg-gray-50"
+            >
+              Switch to Manual Selection
+            </Button>
 
-        <Button
-          onClick={onNext}
-          className="w-full h-14 text-lg font-bold bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-black rounded-2xl shadow-lg border-0"
-        >
-          Continue with AI Selection
-        </Button>
+            <Button
+              onClick={onNext}
+              className="w-full h-14 text-lg font-bold bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-black rounded-2xl shadow-lg border-0"
+            >
+              Continue with AI Selection
+            </Button>
+          </>
+        )}
       </div>
     </div>
   )
